@@ -1,5 +1,5 @@
 # ID
-## Mocukup
+## Mockup
 Figma: https://www.figma.com/file/TKp04Vg3Mlp0YspTrAUE4i/identidade_digital?type=design&node-id=0-1&mode=design
 
 ## Regras de Negócio

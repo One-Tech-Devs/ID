@@ -105,7 +105,7 @@
       get_url:
         url: https://dot.net/v1/dotnet-install.sh
         dest: /home/ubuntu/app/dotnet-install.sh
-      when: apt_updated is succeeded
+      when: apt_updated.rc == 0
 
     - name: Dar permissões de execução ao script
       become: true

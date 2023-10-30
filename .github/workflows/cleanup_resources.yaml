@@ -1,0 +1,84 @@
+name: Excluir Instância AWS
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - destroy  # Adicione a branch "destroy" aqui
+      # commando: git push origin destroy
+
+jobs:
+  delete-instance:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout código-fonte
+      uses: actions/checkout@v2
+
+    - name: Configurar AWS CLI
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1  # Substitua pela região AWS desejada
+
+    - name: Verificar branch
+      run: |
+        if [ "$GITHUB_REF" != "refs/heads/destroy" ]; then
+          echo "Ação de destruição só é permitida na branch 'destroy'."
+          exit 1
+        fi
+
+    - name: Listar instâncias em execução
+      run: |
+        INSTANCE_NAME=santosclaudinei_vm
+
+        # Obter a ID da instância em execução com base no nome
+        INSTANCE_ID=$(aws ec2 describe-instances --filters "Name=tag:Name,Values=$INSTANCE_NAME" "Name=instance-state-name,Values=running" --query "Reservations[0].Instances[0].InstanceId" --output text)
+
+        if [ -n "$INSTANCE_ID" ]; then
+          # Obter o ID do grupo de segurança
+          SECURITY_GROUP_NAME=security_group_claudinei
+          SECURITY_GROUP_ID=$(aws ec2 describe-security-groups --group-names $SECURITY_GROUP_NAME --query "SecurityGroups[0].GroupId" --output text)
+
+          if [ -n "$SECURITY_GROUP_ID" ]; then
+            # Desassociar o grupo de segurança da instância
+            aws ec2 modify-instance-attribute --instance-id $INSTANCE_ID --groups $SECURITY_GROUP_ID
+            echo "Grupo de segurança $SECURITY_GROUP_NAME desassociado da instância $INSTANCE_NAME."
+          else
+          echo "Grupo de segurança $SECURITY_GROUP_NAME não encontrado."
+          fi
+
+          # Aguardar alguns segundos para garantir que a desassociação seja concluída
+          sleep 5
+
+          # Terminar a instância
+          aws ec2 terminate-instances --instance-ids $INSTANCE_ID
+          echo "Instância $INSTANCE_NAME está sendo excluída."
+
+          # Excluir Key Pair
+          KEY_NAME=terraform_keypair
+
+          # Excluir o key pair
+          aws ec2 delete-key-pair --key-name $KEY_NAME
+          echo "Key pair $KEY_NAME foi excluído."
+        else
+          echo "Instância $INSTANCE_NAME não encontrada ou não está em execução."
+        fi
+
+    - name: Excluir Security Group
+      run: |
+        SECURITY_GROUP_NAME=aws_security_group.security_group_claudinei
+
+        # Loop até que o grupo de segurança não esteja mais associado a instâncias
+        while aws ec2 describe-instances --filters "Name=instance.group-name,Values=$SECURITY_GROUP_NAME" --query "Reservations[*].Instances[*].InstanceId" --output text | grep -q .; do
+          echo "Aguardando a desassociação do grupo de segurança $SECURITY_GROUP_NAME de todas as instâncias..."
+          sleep 10
+        done
+
+        # Aguardar mais alguns segundos para garantir que todas as associações sejam removidas
+        sleep 30
+
+        # Excluir o security group
+        aws ec2 delete-security-group --group-name $SECURITY_GROUP_NAME
+        echo "Security group $SECURITY_GROUP_NAME foi excluído."

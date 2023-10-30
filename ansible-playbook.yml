@@ -105,24 +105,20 @@
       get_url:
         url: https://dot.net/v1/dotnet-install.sh
         dest: /home/ubuntu/app/dotnet-install.sh
-      when: apt_updated.rc == 0
 
     - name: Dar permissões de execução ao script
       become: true
       shell: chmod +x /home/ubuntu/app/dotnet-install.sh
-      when: apt_updated is succeeded
 
     - name: Instalar o .NET SDK 7 usando dotnet-install.sh
       become: true
       shell: |
         /home/ubuntu/app/dotnet-install.sh --version latest
-      when: apt_updated is succeeded
 
     - name: Instalar o tempo de execução do .NET 7 usando dotnet-install.sh
       become: true
       shell: |
         /home/ubuntu/app/dotnet-install.sh --version latest --runtime aspnetcore
-      when: apt_updated is succeeded
 
     - name: Configurar as variáveis de ambiente
       become: true
@@ -130,7 +126,6 @@
         path: ~/.bashrc
         line: "export DOTNET_ROOT=$HOME/.dotnet"
         create: yes
-      when: apt_updated is succeeded
 
     - name: Adicionar o .NET SDK e runtime ao PATH
       become: true
@@ -138,4 +133,3 @@
         path: ~/.bashrc
         line: "export PATH=$PATH:$DOTNET_ROOT"
         create: yes
-      when: apt_updated is succeeded

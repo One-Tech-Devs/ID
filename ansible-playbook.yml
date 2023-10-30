@@ -1,0 +1,141 @@
+---
+- name: Instalar Docker no Host Remoto
+  hosts: santosclaudinei_vm
+  become: yes
+  remote_user: ubuntu
+  tasks:
+    - name: Atualizar lista de pacotes
+      apt:
+        update_cache: yes
+      become: true
+      register: apt_atualizado
+
+    - name: Aguardar um tempo antes de atualizar os pacotes
+      pause:
+        seconds: 80
+
+    - name: Instalar pacotes necessários
+      apt:
+        name:
+          - apt-transport-https
+          - ca-certificates
+          - curl
+          - software-properties-common
+        state: present
+      become: true
+      when: apt_atualizado is succeeded
+
+    - name: Adicionar chave GPG do Docker
+      apt_key:
+        url: https://download.docker.com/linux/ubuntu/gpg
+        state: present
+      become: true
+
+    - name: Adicionar repositório do Docker
+      apt_repository:
+        repo: deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable
+        state: present
+      become: true
+
+    - name: Instalar Docker
+      apt:
+        name: docker-ce
+        state: present
+      become: true
+
+    - name: Garantir que o Docker esteja rodando
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+      become: true
+
+    - name: Ensure current user is in docker group
+      user:
+        name: ubuntu
+        groups: docker
+        append: yes
+      become: true
+
+    - name: Reiniciar sessão SSH
+      command: sudo service ssh restart
+      become: yes
+
+    - name: Install Docker Compose
+      shell: curl -fsSL https://github.com/docker/compose/releases/latest/download/docker-compose-Linux-x86_64 -o /usr/local/bin/docker-compose && chmod +x /usr/local/bin/docker-compose
+      become: true
+
+    - name: Verificar a versão do docker-compose
+      command: docker-compose --version
+      register: docker_compose_version
+      changed_when: false
+      failed_when: docker_compose_version.rc != 0
+      become: true
+
+    - name: Mostrar a versão do docker-compose
+      debug:
+        var: docker_compose_version.stdout_lines
+      become: true
+
+    - name: Copiar chave SSH para a instância
+      copy:
+        src: ~/.ssh/id_ed25519
+        dest: /home/ubuntu/.ssh/id_ed25519
+        owner: ubuntu
+        group: ubuntu
+        mode: '0600'
+
+    - name: Copiar chave SSH pública
+      ansible.builtin.copy:
+        content: ~/.ssh/id_ed25519.pub
+        dest: ~/.ssh/id_ed25519.pub
+        mode: '0644'
+
+    - name: Clonar repositório Git
+      become: yes
+      become_user: ubuntu
+      git:
+        repo: 'git@github.com:One-Tech-Devs/ID_backend.git'
+        dest: /home/ubuntu/app
+        version: main
+        accept_hostkey: yes
+
+    - name: Baixar o script dotnet-install.sh
+      become: true
+      get_url:
+        url: https://dot.net/v1/dotnet-install.sh
+        dest: /home/ubuntu/app/dotnet-install.sh
+      when: apt_updated is succeeded
+
+    - name: Dar permissões de execução ao script
+      become: true
+      shell: chmod +x /home/ubuntu/app/dotnet-install.sh
+      when: apt_updated is succeeded
+
+    - name: Instalar o .NET SDK 7 usando dotnet-install.sh
+      become: true
+      shell: |
+        /home/ubuntu/app/dotnet-install.sh --version latest
+      when: apt_updated is succeeded
+
+    - name: Instalar o tempo de execução do .NET 7 usando dotnet-install.sh
+      become: true
+      shell: |
+        /home/ubuntu/app/dotnet-install.sh --version latest --runtime aspnetcore
+      when: apt_updated is succeeded
+
+    - name: Configurar as variáveis de ambiente
+      become: true
+      lineinfile:
+        path: ~/.bashrc
+        line: "export DOTNET_ROOT=$HOME/.dotnet"
+        create: yes
+      when: apt_updated is succeeded
+
+    - name: Adicionar o .NET SDK e runtime ao PATH
+      become: true
+      lineinfile:
+        path: ~/.bashrc
+        line: "export PATH=$PATH:$DOTNET_ROOT"
+        create: yes
+      when: apt_updated is succeeded
